@@ -2,7 +2,7 @@
 title: "The Story of America's Dam Infrastructure"
 subtitle: "Exploring 92,428 Dams Across the United States"
 format: 
-  pdf:
+  html:
     code-fold: false
     code-summary: "Show code"
     embed-resources: true
