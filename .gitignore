@@ -1,3 +1,4 @@
-/.quarto/
 *.html
-*/index_files
+/index_files
+.Rhistory
+.venv
