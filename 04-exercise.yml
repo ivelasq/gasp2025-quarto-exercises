@@ -1,0 +1,72 @@
+meta:
+  name:
+    short: GASP
+    full: Government Advances in Statistical Programming
+  link:
+    home: https://community.amstat.org/gasp/home
+
+logo:
+  small: ../images/fcsm-logo-no-text.png
+
+color:
+  palette:
+    white: "#FFFFFF"
+    black: "#000000"
+    blue: "#003366"
+    grey: "#dbdbdb"
+    red: "#991b1f"
+    pink: "#efb3b5"
+  foreground: black
+  background: grey
+  primary: blue
+  secondary: "#666666"
+  success: "#2E7D32"
+  info: "#0277BD"
+  warning: red
+  danger: "#C62828"
+
+typography:
+  fonts:
+    - family: Open Sans
+      source: bunny
+      weight: [400, 700]
+      style: [normal, italic]
+    - family: Squada One
+      source: bunny
+    - family: Roboto Mono
+      source: bunny
+      weight: [400, 700]
+      style: [normal, italic]
+
+  base:
+    family: Open Sans
+    weight: 400
+    line-height: 1.2
+
+  headings:
+    family: Squada One
+    line-height: 1.2
+    color: primary
+
+  monospace:
+    family: Roboto Mono
+    weight: 400
+   
+  monospace-inline:
+    color: primary
+    background-color: "#f5f5f5"
+
+defaults:
+  quarto:
+    format:
+      html:
+        theme: cosmo
+        toc: true
+  monospace-block:
+    color: foreground
+    background-color: background
+
+  link:
+    weight: 600
+    color: primary
+    decoration: underline

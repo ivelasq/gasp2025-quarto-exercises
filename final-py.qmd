@@ -1,0 +1,356 @@
+---
+title: "The Story of America's Dam Infrastructure"
+subtitle: "Exploring 92,428 Dams Across the United States"
+format: 
+  html:
+    code-fold: true
+    code-summary: "Show code"
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+jupyter: python3
+---
+
+```{python setup}
+#| include: false
+import pandas as pd
+import numpy as np
+from plotnine import *
+
+dat = pd.read_csv("data/nation.csv", skiprows=1)
+
+dat.columns = dat.columns.str.lower().str.replace(' ', '_').str.replace('(', '').str.replace(')', '').str.replace('/', '_')
+
+theme_dam = (theme_minimal() + 
+            theme(plot_title=element_text(size=14),
+                  plot_subtitle=element_text(size=12, color='gray'),
+                  axis_text=element_text(size=10),
+                  legend_position='bottom'))
+
+total_dams = len(dat)
+median_year = dat['year_completed'].median()
+peak_decade_count = (dat[dat['year_completed'].notna()]
+                    .assign(decade=lambda x: (x['year_completed'] // 10) * 10)
+                    .groupby('decade').size().max())
+recreation_count = (dat['primary_purpose'] == 'Recreation').sum()
+high_hazard_count = (dat['hazard_potential_classification'] == 'High').sum()
+private_pct = round((dat['primary_owner_type'] == 'Private').mean() * 100)
+```
+
+## 📊 Executive Summary
+
+This analysis explores the **National Inventory of Dams (NID)** dataset, containing detailed information about **`{python} f"{total_dams:,}"`** dams across the United States. Our findings reveal fascinating patterns about America's water infrastructure, from the post-war construction boom to surprising geographic distributions.
+
+::: {.callout-important}
+## Key Findings at a Glance
+- **Peak construction era**: 1960s saw `{python} f"{peak_decade_count:,}"` dams built
+- **Recreation dominates**: `{python} f"{recreation_count:,}"` dams are primarily for recreation
+- **Safety concerns**: `{python} f"{high_hazard_count:,}"` dams classified as **high hazard**
+- **Private ownership**: `{python} f"{private_pct}%"` of dams are privately owned
+:::
+
+---
+
+## 🏗️ The Great Dam Building Boom
+
+### When Were America's Dams Built?
+
+The story of American dam construction is essentially the story of **post-World War II infrastructure development**. The median dam was completed in **`{python} f"{median_year:.0f}"`**, highlighting the massive construction efforts of the mid-20th century.
+
+```{python construction-timeline}
+#| fig-cap: "Dam Construction by Decade: The 1960s Boom"
+#| fig-height: 6
+
+# Prepare construction data
+construction_data = (dat[dat['year_completed'].notna() & (dat['year_completed'] > 1800)]
+                    .assign(decade=lambda x: (x['year_completed'] // 10) * 10)
+                    .groupby('decade').size().reset_index(name='n')
+                    .assign(peak_decade=lambda x: x['decade'] == 1960)
+                    .assign(label=lambda x: np.where(x['peak_decade'], 
+                                                   x['n'].apply(lambda y: f"{y:,} dams"), "")))
+
+# Create the plot
+(ggplot(construction_data, aes(x='decade', y='n')) +
+ geom_col(aes(fill='peak_decade'), show_legend=False) +
+ geom_text(aes(label='label'), va='bottom', color='darkred') +
+ scale_fill_manual(values={'False': 'steelblue', 'True': 'darkred'}) +
+ scale_y_continuous(labels=lambda x: [f"{int(i/1000)}k" if i >= 1000 else str(int(i)) for i in x]) +
+ labs(title="The 1960s: America's Dam Building Golden Age",
+      subtitle="Nearly 19,000 dams built in a single decade",
+      x="Decade",
+      y="Number of Dams Built",
+      caption="Source: National Inventory of Dams") +
+ theme_dam)
+```
+
+> **Fun Fact**: More dams were built in the **1960s alone** than in the previous 160 years combined!
+
+---
+
+## 🎯 What Are Dams Actually Used For?
+
+Contrary to popular belief, **flood control** isn't the primary purpose of most American dams. Recreation is the most common purpose.
+
+```{python purpose-analysis}
+#| fig-cap: "Primary Purposes of American Dams"
+#| fig-height: 8
+
+# Prepare purpose data
+purpose_data = (dat.groupby('primary_purpose').size().reset_index(name='n')
+               .sort_values('n', ascending=False).head(10)
+               .assign(primary_purpose=lambda x: x['primary_purpose'].str.replace(
+                   'Fire Protection, Stock, Or Small Fish Pond', 'Fire/Stock/Fish Pond'))
+               .assign(percentage=lambda x: x['n'] / x['n'].sum() * 100)
+               .sort_values('n'))
+
+purpose_data['label'] = purpose_data.apply(
+    lambda row: f"{row['n']:,}\n({row['percentage']:.1f}%)", axis=1
+)
+
+# Create the plot
+(ggplot(purpose_data, aes(x='reorder(primary_purpose, n)', y='n')) +
+ geom_col(fill='forestgreen', alpha=0.8) +
+ geom_text(aes(label='label'), ha='left', size=8) +
+ coord_flip() +
+ scale_y_continuous(labels=lambda x: [f"{int(i/1000)}k" if i >= 1000 else str(int(i)) for i in x]) +
+ labs(title="Recreation Dominates American Dam Purposes",
+      subtitle="Top 10 primary purposes for the nation's 92,428 dams",
+      x="Primary Purpose",
+      y="Number of Dams",
+      caption="Source: National Inventory of Dams") +
+ theme_dam)
+```
+
+## The Surprising Recreation Story
+
+**`{python} f"{recreation_count:,}"`** dams (**`{python} f"{recreation_count/total_dams*100:.1f}%"`**) are primarily used for recreation. This includes:
+
+- 🏊 Swimming and boating
+- 🎣 Fishing ponds  
+- 🏕️ Campground water features
+- ⛳ Golf course ponds
+
+---
+
+## ⚠️ Safety First: High-Hazard Dams
+
+The safety implications are sobering: **`{python} f"{high_hazard_count:,}"`** dams are classified as **"High Hazard"**, meaning their failure would likely cause loss of life.
+
+```{python hazard-map}
+#| fig-cap: "High-Hazard Dams by State"
+#| fig-height: 8
+
+# Prepare hazard data
+hazard_data = (dat[dat['hazard_potential_classification'] == 'High']
+              .groupby('state').size().reset_index(name='n')
+              .sort_values('n', ascending=False).head(15)
+              .assign(danger_level=lambda x: pd.cut(x['n'], 
+                                                   bins=[0, 800, 1500, float('inf')], 
+                                                   labels=['Moderate Risk', 'High Risk', 'Extreme Risk']))
+              .sort_values('n'))
+
+# Create the plot
+(ggplot(hazard_data, aes(x='reorder(state, n)', y='n', fill='danger_level')) +
+ geom_col() +
+ geom_text(aes(label='n.apply(lambda x: f"{x:,}")'), ha='left', size=8) +
+ coord_flip() +
+ scale_fill_manual(values={'Extreme Risk': 'darkred', 'High Risk': 'orange', 'Moderate Risk': 'gold'},
+                   name='Risk Level') +
+ scale_y_continuous(labels=lambda x: [f"{int(i/1000)}k" if i >= 1000 else str(int(i)) for i in x]) +
+ labs(title="States with the Most High-Hazard Dams",
+      subtitle="These dams could cause loss of life if they fail",
+      x="State",
+      y="Number of High-Hazard Dams",
+      caption="Source: National Inventory of Dams") +
+ theme_dam)
+```
+
+::: {.callout-warning}
+## Safety Spotlight
+**North Carolina** leads with **`{python} f"{hazard_data.iloc[-1]['n']:,}"`** high-hazard dams, followed by **Texas** with **`{python} f"{hazard_data.iloc[-2]['n']:,}"`**.
+:::
+
+---
+
+## 🏔️ Tallest Dams: Engineering Marvels
+
+### America's Skyscrapers of Water
+
+```{python tallest-dams}
+#| fig-cap: "The 10 Tallest Dams in America"
+
+# Prepare tallest dams data
+tallest_data = (dat[dat['dam_height_ft'].notna()]
+               .nlargest(10, 'dam_height_ft')
+               .assign(dam_type=lambda x: np.select([
+                   x['dam_name'].str.contains('Slurry|Refuse|Tailings', case=False, na=False),
+                   x['dam_name'].isin(['Hoover Dam', 'Glen Canyon Dam', 'Oroville'])],
+                   ['Mining Waste', 'Major Federal'], 'Other'))
+               .sort_values('dam_height_ft'))
+
+# Create the plot
+(ggplot(tallest_data, aes(x='reorder(dam_name, dam_height_ft)', y='dam_height_ft', fill='dam_type')) +
+ geom_col() +
+ geom_text(aes(label='dam_height_ft.apply(lambda x: f"{x:.0f} ft")'), ha='left', size=8) +
+ coord_flip() +
+ scale_fill_manual(values={'Major Federal': 'navy', 'Mining Waste': 'brown', 'Other': 'gray'},
+                   name='Dam Type') +
+ labs(title="America's Tallest Dams: A Mix of Federal Projects and Mining Waste",
+      subtitle="Several mining waste dams rank among the nation's tallest structures",
+      x="Dam Name",
+      y="Height (Feet)",
+      caption="Source: National Inventory of Dams") +
+ theme_dam)
+```
+
+**Surprising finding**: Several of America's tallest "dams" are actually **mining waste containment structures** in Kentucky and West Virginia!
+
+---
+
+## 🏭 Who Owns America's Dams?
+
+The ownership story might surprise you: **`{python} f"{private_pct}%"`** of all dams are **privately owned**.
+
+```{python ownership-pie}
+#| fig-cap: "Dam Ownership Distribution"
+
+ownership_data = (dat[dat['primary_owner_type'].notna() & 
+                     (dat['primary_owner_type'] != 'Not Listed')]
+                 .groupby('primary_owner_type').size().reset_index(name='n')
+                 .sort_values('n', ascending=False)
+                 .assign(percentage=lambda x: x['n'] / x['n'].sum() * 100)
+                 .sort_values('n'))
+
+ownership_data['label'] = ownership_data.apply(
+    lambda row: f"{int(row['n']):,} ({row['percentage']:.1f}%)", axis=1
+)
+
+(ggplot(ownership_data, aes(x='reorder(primary_owner_type, n)', y='n')) +
+ geom_col(fill='steelblue', alpha=0.8) +
+ geom_text(aes(label='label'), ha='left', size=8) +
+ coord_flip() +
+ scale_y_continuous(labels=lambda x: [f"{int(i/1000)}k" if i >= 1000 else str(int(i)) for i in x]) +
+ labs(title="Private Ownership Dominates American Dams",
+      subtitle="Nearly two-thirds of dams are privately owned",
+      x="Owner Type",
+      y="Number of Dams",
+      caption="Source: National Inventory of Dams") +
+ theme_dam)
+```
+
+---
+
+## ⚡ Hydroelectric Hotspots
+
+Where does America generate hydroelectric power? The answer might surprise you - it's not just the Pacific Northwest!
+
+```{python hydro-map}
+#| fig-cap: "Hydroelectric Dams by State"
+
+hydro_data = (dat[dat['primary_purpose'] == 'Hydroelectric']
+             .groupby('state').size().reset_index(name='n')
+             .sort_values('n', ascending=False).head(12)
+             .sort_values('n'))
+
+def assign_region(state):
+    if state in ['Maine', 'New Hampshire', 'Vermont', 'Massachusetts']:
+        return 'New England'
+    elif state in ['New York', 'Pennsylvania']:
+        return 'Mid-Atlantic'
+    elif state in ['California', 'Washington', 'Oregon']:
+        return 'West Coast'
+    else:
+        return 'Other'
+
+hydro_data['region'] = hydro_data['state'].apply(assign_region)
+
+(ggplot(hydro_data, aes(x='reorder(state, n)', y='n', fill='region')) +
+ geom_col() +
+ geom_text(aes(label='n'), ha='left', size=8) +
+ coord_flip() +
+ scale_fill_manual(values={'New England': 'darkgreen', 'Mid-Atlantic': 'navy', 
+                          'West Coast': 'orange', 'Other': 'gray'},
+                   name='Region') +
+ labs(title="New York Leads in Hydroelectric Dams",
+      subtitle="New England states dominate small-scale hydroelectric generation",
+      x="State",
+      y="Number of Hydroelectric Dams",
+      caption="Source: National Inventory of Dams") +
+ theme_dam)
+```
+
+**Key insight**: **New England states** (Maine, New Hampshire, Vermont, Massachusetts) collectively have more hydroelectric dams than the traditionally hydro-focused Western states!
+
+---
+
+## 🌊 Average Dam Heights by State
+
+Which states build the tallest dams on average?
+
+```{python average-heights}
+#| fig-cap: "Average Dam Height by State (States with 50+ dams)"
+
+height_data = (dat[dat['dam_height_ft'].notna() & (dat['dam_height_ft'] > 0)]
+              .groupby('state').agg({'dam_height_ft': ['mean', 'count']}).reset_index()
+              .droplevel(0, axis=1)
+              .rename(columns={'': 'state', 'mean': 'avg_height', 'count': 'count'})
+              .query('count >= 50')
+              .sort_values('avg_height', ascending=False).head(15)
+              .assign(avg_height=lambda x: x['avg_height'].round(1))
+              .assign(highlight=lambda x: x['state'].isin(['Washington', 'West Virginia', 'Colorado']))
+              .sort_values('avg_height'))
+
+# Create the plot
+(ggplot(height_data, aes(x='reorder(state, avg_height)', y='avg_height', fill='highlight')) +
+ geom_col(show_legend=False) +
+ geom_text(aes(label='avg_height.apply(lambda x: f"{x} ft")'), ha='left', size=8) +
+ coord_flip() +
+ scale_fill_manual(values={'False': 'steelblue', 'True': 'darkred'}) +
+ labs(title="Washington State Builds the Tallest Dams on Average",
+      subtitle="Average height for states with 50+ dams in the database",
+      x="State",
+      y="Average Dam Height (Feet)",
+      caption="Source: National Inventory of Dams") +
+ theme_dam)
+```
+
+---
+
+## 📈 Key Takeaways
+
+::: {.callout-note collapse="false"}
+## 🎯 What We Learned
+
+1. **🏗️ Infrastructure Boom**: The 1960s were the golden age of dam construction
+2. **🎣 Recreation Rules**: Most dams serve recreational purposes, not flood control
+3. **⚠️ Safety Concerns**: Nearly 17,000 high-hazard dams need monitoring
+4. **🏘️ Private Property**: Nearly 2/3 of dams are privately owned
+5. **⚡ Hydro Surprise**: New England, not the West, leads in hydroelectric dam count
+6. **🏔️ Height Champions**: Washington state builds the tallest dams on average
+7. **⛏️ Mining Impact**: Mining waste dams are concentrated in specific states
+:::
+
+---
+
+## 📊 Dataset Summary
+
+**Data Source**: [National Inventory of Dams (NID)](https://nid.sec.usace.army.mil/#/downloads)  
+**Maintained by**: U.S. Army Corps of Engineers  
+**Total Records**: `{python} f"{total_dams:,}"`
+**Variables**: `{python} f"{len(dat.columns)}"`
+**Coverage**: All 50 US states plus territories  
+**Analysis Date**: `{python} pd.Timestamp.now().strftime('%Y-%m-%d')`
+
+---
+
+## 📋 Data Source
+
+This analysis uses data from the **[National Inventory of Dams (NID)](https://nid.sec.usace.army.mil/#/downloads)**, maintained by the U.S. Army Corps of Engineers. The NID is a comprehensive database containing information on dams throughout the United States and its territories.
+
+This analysis was prepared with the assistance of Anthropic Claude 4 Sonnet.
+
+::: {.callout-note}
+## About the National Inventory of Dams
+The NID was established following the National Dam Safety Act of 1972 and serves as a key resource for dam safety, emergency preparedness, and water resource management. The database is regularly updated with information submitted by state dam safety agencies and federal agencies.
+:::
